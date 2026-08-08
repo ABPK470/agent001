@@ -153,11 +153,8 @@ describe("light theme color system", () => {
       expect(css).toMatch(new RegExp(`\\.event-stream-filter-type--${lane}\\s*\\{`))
     }
     // Dual-mode badge tokens — agent emerald (never error-red / dt-bool rose).
-    expect(darkThemeBlock()).toMatch(/--stream-agent-ink:\s*#34d399/i)
-    expect(lightThemeBlock()).toMatch(/--stream-agent-ink:\s*#047857/i)
     expect(lightThemeBlock()).toMatch(/--stream-step-soft:\s*#f3e8ff/i)
     expect(lightThemeBlock()).toMatch(/--stream-step-border:\s*#e9d5ff/i)
-    expect(darkThemeBlock()).toMatch(/--stream-step-ink:\s*#c084fc/i)
     expect(css).toMatch(/\.event-stream-type--agent\b/)
     expect(css).toMatch(/\.event-stream-filter-type--agent\b/)
     expect(css).toMatch(
@@ -166,16 +163,27 @@ describe("light theme color system", () => {
     expect(css).toMatch(/\.event-stream-row\s*\{[^}]*grid-template-columns:/s)
     expect(css).toMatch(/\.event-stream-row__time\s*\{[^}]*font-family:\s*var\(--font-mono/s)
     expect(css).toMatch(/\.event-stream-jump\s*\{[^}]*position:\s*sticky/s)
-    // Lane spread: run indigo · sync cyan · api amber · system zinc (not blue-slate).
-    expect(darkThemeBlock()).toMatch(/--stream-run-ink:\s*#818cf8/i)
-    expect(darkThemeBlock()).toMatch(/--stream-sync-ink:\s*#22d3ee/i)
-    expect(darkThemeBlock()).toMatch(/--stream-api-ink:\s*#fbbf24/i)
-    expect(darkThemeBlock()).toMatch(/--stream-system-ink:\s*#a1a1aa/i)
-    expect(lightThemeBlock()).toMatch(/--stream-sync-ink:\s*#0e7490/i)
-    expect(lightThemeBlock()).toMatch(/--stream-api-ink:\s*#b45309/i)
+    // Lane spread: run blue · step violet · sync magenta · bridge cyan ·
+    // agent green · api teal · system zinc.
+    expect(lightThemeBlock()).toMatch(/--stream-run-ink:\s*#2563eb/i)
+    expect(lightThemeBlock()).toMatch(/--stream-step-ink:\s*#9333ea/i)
+    expect(lightThemeBlock()).toMatch(/--stream-sync-ink:\s*#db2777/i)
+    expect(lightThemeBlock()).toMatch(/--stream-bridge-ink:\s*#0891b2/i)
+    expect(lightThemeBlock()).toMatch(/--stream-agent-ink:\s*#16a34a/i)
+    expect(lightThemeBlock()).toMatch(/--stream-api-ink:\s*#0f766e/i)
     expect(lightThemeBlock()).toMatch(/--stream-system-ink:\s*#52525b/i)
-    expect(darkThemeBlock()).not.toMatch(/--stream-api-ink:\s*#(60a5fa|2dd4bf|38bdf8)/i)
-    expect(lightThemeBlock()).not.toMatch(/--stream-api-ink:\s*#(1d4ed8|115e59|0369a1)/i)
+    expect(darkThemeBlock()).toMatch(/--stream-run-ink:\s*#60a5fa/i)
+    expect(darkThemeBlock()).toMatch(/--stream-step-ink:\s*#c084fc/i)
+    expect(darkThemeBlock()).toMatch(/--stream-sync-ink:\s*#f472b6/i)
+    expect(darkThemeBlock()).toMatch(/--stream-bridge-ink:\s*#22d3ee/i)
+    expect(darkThemeBlock()).toMatch(/--stream-agent-ink:\s*#4ade80/i)
+    expect(darkThemeBlock()).toMatch(/--stream-api-ink:\s*#2dd4bf/i)
+    expect(darkThemeBlock()).toMatch(/--stream-system-ink:\s*#a1a1aa/i)
+    // Run is royal blue; API is teal — not swapped / not wheat.
+    expect(lightThemeBlock()).not.toMatch(/--stream-api-ink:\s*#(2563eb|a16207|b45309)/i)
+    expect(darkThemeBlock()).not.toMatch(/--stream-api-ink:\s*#(60a5fa|f8ed81|fbbf24)/i)
+    expect(darkThemeBlock()).not.toMatch(/--stream-sync-ink:\s*#(fb923c|f97316)/i)
+    expect(lightThemeBlock()).not.toMatch(/--stream-sync-ink:\s*#(c2410c|ea580c)/i)
     // System must not share run’s blue-slate cast in the histogram.
     expect(darkThemeBlock()).not.toMatch(/--stream-system-ink:\s*#(94a3b8|64748b|cbd5e1)/i)
     expect(lightThemeBlock()).not.toMatch(/--stream-system-ink:\s*#(334155|1e293b)/i)

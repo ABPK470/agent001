@@ -280,35 +280,32 @@
   --viewing-as-soft: var(--accent-soft);
 
   /*
-   * Event Stream lanes — dual-mode badge tokens (ink / soft / border).
-   * Dark: glowing ink + translucent tint. Red/rose reserved for severity.
-   * Spread: run indigo · sync cyan · api wheat · agent emerald · system zinc
-   * Derive soft/border from ink: dark → rgba(ink_rgb, 0.14|0.28); light → same
-   * hue, ink ~700-step readable, soft ~50–100 tint, border ~200–300 tint.
-   * (system stays cool/neutral but loses the blue cast that read as faded run).
+   * Event Stream lanes — dual-mode badge + histogram tokens (ink / soft / border).
+   * Source palette (light ink): run royal blue · step violet · sync magenta ·
+   * bridge cyan · agent green · api teal · system zinc.
+   * Dark ink = same hue, lifted for dark surfaces. Soft/border = ink RGB + alpha.
    */
-  --stream-run-ink: #818cf8;
-  --stream-run-soft: rgba(129, 140, 248, 0.16);
-  --stream-run-border: rgba(129, 140, 248, 0.32);
+  --stream-run-ink: #60a5fa;
+  --stream-run-soft: rgba(96, 165, 250, 0.14);
+  --stream-run-border: rgba(96, 165, 250, 0.28);
   --stream-step-ink: #c084fc;
-  --stream-step-soft: rgba(168, 85, 247, 0.14);
-  --stream-step-border: rgba(168, 85, 247, 0.28);
-  --stream-sync-ink: #22d3ee;
-  --stream-sync-soft: rgba(34, 211, 238, 0.14);
-  --stream-sync-border: rgba(34, 211, 238, 0.28);
-  --stream-bridge-ink: #fb923c;
-  --stream-bridge-soft: rgba(251, 146, 60, 0.14);
-  --stream-bridge-border: rgba(251, 146, 60, 0.28);
-  --stream-agent-ink: #34d399;
-  --stream-agent-soft: rgba(52, 211, 153, 0.14);
-  --stream-agent-border: rgba(52, 211, 153, 0.28);
-  --stream-api-ink: #f8ed81;
-  --stream-api-soft: rgba(248, 237, 129, 0.14);
-  --stream-api-border: rgba(248, 237, 129, 0.28);
-  /* System = zinc (true gray) — not blue-slate, so histogram ≠ washed run. */
+  --stream-step-soft: rgba(192, 132, 252, 0.14);
+  --stream-step-border: rgba(192, 132, 252, 0.28);
+  --stream-sync-ink: #f472b6;
+  --stream-sync-soft: rgba(244, 114, 182, 0.14);
+  --stream-sync-border: rgba(244, 114, 182, 0.28);
+  --stream-bridge-ink: #22d3ee;
+  --stream-bridge-soft: rgba(34, 211, 238, 0.14);
+  --stream-bridge-border: rgba(34, 211, 238, 0.28);
+  --stream-agent-ink: #4ade80;
+  --stream-agent-soft: rgba(74, 222, 128, 0.14);
+  --stream-agent-border: rgba(74, 222, 128, 0.28);
+  --stream-api-ink: #2dd4bf;
+  --stream-api-soft: rgba(45, 212, 191, 0.14);
+  --stream-api-border: rgba(45, 212, 191, 0.28);
   --stream-system-ink: #a1a1aa;
   --stream-system-soft: rgba(161, 161, 170, 0.14);
-  --stream-system-border: rgba(161, 161, 170, 0.30);
+  --stream-system-border: rgba(161, 161, 170, 0.28);
   /* Back-compat aliases (ink only). */
   --stream-run: var(--stream-run-ink);
   --stream-step: var(--stream-step-ink);
@@ -473,27 +470,26 @@
 
   /*
    * Event Stream lanes — contained pills on white paper
-   * (deep ink + pastel fill + 1px border). Same hue spread as dark.
+   * (readable ink + pastel fill + 1px border). Source palette.
    */
-  --stream-run-ink: #3730a3;
-  --stream-run-soft: #eef2ff;
-  --stream-run-border: #c7d2fe;
-  --stream-step-ink: #6b21a8;
+  --stream-run-ink: #2563eb;
+  --stream-run-soft: #dbeafe;
+  --stream-run-border: #bfdbfe;
+  --stream-step-ink: #9333ea;
   --stream-step-soft: #f3e8ff;
   --stream-step-border: #e9d5ff;
-  --stream-sync-ink: #0e7490;
-  --stream-sync-soft: #cffafe;
-  --stream-sync-border: #67e8f9;
-  --stream-bridge-ink: #c2410c;
-  --stream-bridge-soft: #ffedd5;
-  --stream-bridge-border: #fed7aa;
-  --stream-agent-ink: #047857;
-  --stream-agent-soft: #ecfdf5;
-  --stream-agent-border: #a7f3d0;
-  --stream-api-ink: #a16207;
-  --stream-api-soft: #fef9c3;
-  --stream-api-border: #fde047;
-  /* System = zinc — cool neutral without slate’s blue cast. */
+  --stream-sync-ink: #db2777;
+  --stream-sync-soft: #fce7f3;
+  --stream-sync-border: #fbcfe8;
+  --stream-bridge-ink: #0891b2;
+  --stream-bridge-soft: #cffafe;
+  --stream-bridge-border: #a5f3fc;
+  --stream-agent-ink: #16a34a;
+  --stream-agent-soft: #f0fdf4;
+  --stream-agent-border: #bbf7d0;
+  --stream-api-ink: #0f766e;
+  --stream-api-soft: #ccfbf1;
+  --stream-api-border: #99f6e4;
   --stream-system-ink: #52525b;
   --stream-system-soft: #f4f4f5;
   --stream-system-border: #d4d4d8;
