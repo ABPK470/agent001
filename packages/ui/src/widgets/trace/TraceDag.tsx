@@ -777,6 +777,34 @@ export function TraceDag({
               <PanelLeft size={15} strokeWidth={2} aria-hidden />
             </button>
             <TraceRunContext />
+            {/* Telemetry rides the scope row — no second band under the toolbar. */}
+            <div className="trace-scope-row__meta">
+              <div className="widget-review-meta__stats">
+                {metaStats.length === 0 ? (
+                  <span className="widget-review-meta__empty">No agent loop yet</span>
+                ) : (
+                  metaStats.map((stat) => (
+                    <span
+                      key={`${stat.value}:${stat.label ?? ""}`}
+                      className="widget-review-meta__stat"
+                    >
+                      <span className="widget-review-meta__stat-value">{stat.value}</span>
+                      {stat.label ? (
+                        <span className="widget-review-meta__stat-label">{stat.label}</span>
+                      ) : null}
+                    </span>
+                  ))
+                )}
+              </div>
+              {runStatus ? (
+                <span
+                  className={operationStatusPill(runStatus)}
+                  title={`Run status: ${runStatus}`}
+                >
+                  {runStatus}
+                </span>
+              ) : null}
+            </div>
           </div>
 
           <div className={WIDGET_REVIEW_CONTROLS_CLASS}>
@@ -823,39 +851,6 @@ export function TraceDag({
               />
             </WidgetToolbarTrailing>
           </WidgetToolbar>
-          </div>
-
-          <div className={WIDGET_REVIEW_CONTROLS_INSET_CLASS}>
-            {/* Telemetry only — scope lives in the bar above. */}
-            <div className="widget-filter-band widget-review-meta">
-              <div className="widget-review-meta__stats">
-                {metaStats.length === 0 ? (
-                  <span className="widget-review-meta__empty">No agent loop yet</span>
-                ) : (
-                  metaStats.map((stat) => (
-                    <span
-                      key={`${stat.value}:${stat.label ?? ""}`}
-                      className="widget-review-meta__stat"
-                    >
-                      <span className="widget-review-meta__stat-value">{stat.value}</span>
-                      {stat.label ? (
-                        <span className="widget-review-meta__stat-label">{stat.label}</span>
-                      ) : null}
-                    </span>
-                  ))
-                )}
-              </div>
-              {runStatus ? (
-                <div className="widget-review-meta__ids">
-                  <span
-                    className={operationStatusPill(runStatus)}
-                    title={`Run status: ${runStatus}`}
-                  >
-                    {runStatus}
-                  </span>
-                </div>
-              ) : null}
-            </div>
           </div>
           </div>
           </>

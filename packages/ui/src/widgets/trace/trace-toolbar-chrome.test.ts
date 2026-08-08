@@ -78,12 +78,12 @@ describe("Trace toolbar structure + behavior wiring", () => {
     expect(dag).toContain("WidgetToolbarLeading")
     expect(dag).toContain("WidgetToolbarSearch")
     expect(dag).toContain("WidgetToolbarTrailing")
-    // Scope chrome outside review-controls; toolbar + meta stay in the band.
+    // Scope chrome + telemetry outside review-controls; toolbar alone in the band.
     const jsx = dag.slice(dag.indexOf("return ("))
     expect(jsx.indexOf("trace-scope-row")).toBeGreaterThan(-1)
     expect(jsx.indexOf("TraceRunContext")).toBeLessThan(jsx.indexOf("WIDGET_REVIEW_CONTROLS_CLASS"))
     expect(jsx).toMatch(
-      /trace-scope-row[\s\S]*?TraceRunContext[\s\S]*?WIDGET_REVIEW_CONTROLS_CLASS[\s\S]*?WidgetToolbar[\s\S]*?widget-review-meta/,
+      /trace-scope-row[\s\S]*?TraceRunContext[\s\S]*?trace-scope-row__meta[\s\S]*?WIDGET_REVIEW_CONTROLS_CLASS[\s\S]*?WidgetToolbar/,
     )
   })
 
@@ -146,19 +146,21 @@ describe("Trace toolbar structure + behavior wiring", () => {
     expect(fold).toContain("onFoldModeChange")
   })
 
-  it("scope bar precedes toolbar; meta is telemetry only", () => {
+  it("scope bar carries breadcrumbs + telemetry; no meta band under toolbar", () => {
     const dag = read(dagPath)
     const zen = read(zenHudPath)
     const context = read(contextPath)
+    const jsx = dag.slice(dag.indexOf("return ("))
     expect(dag).toContain("<TraceRunContext />")
-    expect(dag).toMatch(
-      /<TraceRunContext \/>[\s\S]*?<WidgetToolbar>[\s\S]*?widget-review-meta/,
+    expect(jsx).toMatch(
+      /trace-scope-row[\s\S]*?<TraceRunContext \/>[\s\S]*?trace-scope-row__meta[\s\S]*?widget-review-meta__stats/,
     )
-    expect(dag).toContain("widget-filter-band widget-review-meta")
-    expect(dag).toContain("widget-review-meta__stats")
-    expect(dag).toContain("widget-review-meta__stat-value")
-    // Pickers are not in the meta band — status pill may still use __ids.
-    expect(dag).not.toMatch(/widget-review-meta__ids[\s\S]{0,120}TraceRunContext/)
+    expect(jsx).toContain("widget-review-meta__stat-value")
+    expect(jsx).not.toContain("widget-filter-band widget-review-meta")
+    // Toolbar band has no second inset for telemetry.
+    expect(jsx).not.toMatch(
+      /WidgetToolbar[\s\S]*?trace-scope-row__meta|WidgetToolbar[\s\S]*?widget-review-meta__stats/,
+    )
     expect(context).toContain("trace-run-context")
     expect(context).toContain("trace-run-context__pill")
     expect(dag).toContain("TraceScopeDrawer")
