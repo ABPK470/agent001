@@ -677,5 +677,54 @@ describe("Trace CSS contract — pin indent + work-note divider", () => {
     expect(drawer).not.toContain("trace-scope-drawer__runs-wrap")
     expect(css).toMatch(/\.trace-scope-drawer \.trace-tree-row__btn:focus-visible\s*\{[^}]*outline:\s*none/s)
     expect(drawer).not.toMatch(/scrollIntoView\([\s\S]*\.focus\(/)
+    expect(drawer).toContain("scrollScopeDrawerRowIntoList")
+    expect(drawer).toContain("motionReady")
+  })
+
+  it("scope drawer slides the panel inside a fixed right shell — not the split host", () => {
+    const dagSrc = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "TraceDag.tsx"),
+      "utf8",
+    )
+    expect(dagSrc).toContain("trace-scope-drawer-shell")
+    expect(dagSrc).toContain("data-entered")
+    expect(dagSrc).toMatch(
+      /trace-scope-drawer-shell[\s\S]*TraceScopeDrawer/,
+    )
+    // Shell is a positioning slot — must not carry the slide.
+    expect(css).toMatch(
+      /\.trace-scope-drawer-shell\s*\{[^}]*transform:\s*none/s,
+    )
+    expect(css).toMatch(
+      /\.trace-scope-drawer-shell\s*\{[^}]*overflow:\s*hidden/s,
+    )
+    // Transition open (not keyframes) — avoids end-of-anim jump-back.
+    expect(css).toMatch(
+      /\.trace-scope-drawer\s*\{[^}]*transition:\s*transform/s,
+    )
+    expect(css).toContain(
+      '.trace-scope-drawer-layer[data-entered="true"] .trace-scope-drawer',
+    )
+    expect(css).not.toContain("@keyframes trace-scope-drawer-panel-in")
+    expect(css).not.toMatch(
+      /\.trace-scope-drawer-shell\s*\{[^}]*animation:/s,
+    )
+    expect(css).toMatch(/--trace-scope-drawer-w:\s*min\(36rem,\s*94%\)/)
+    // Shell is an invisible clip — paint/shadow only on the sliding panel
+    // (a painted shell flashes an empty drawer before the panel enters).
+    expect(css).toMatch(
+      /\.trace-scope-drawer-shell\s*\{[^}]*box-shadow:\s*none/s,
+    )
+    expect(css).toMatch(
+      /\.trace-scope-drawer-shell\s*\{[^}]*background:\s*transparent/s,
+    )
+    expect(css).toMatch(
+      /\.trace-scope-drawer\s*\{[^}]*box-shadow:/s,
+    )
+    expect(css).toMatch(/--trace-scope-drawer-dur:\s*300ms/)
+    // Soft decelerate — not the audit spring curve.
+    expect(css).toMatch(
+      /--trace-scope-drawer-ease:\s*cubic-bezier\(0\.33,\s*1,\s*0\.68,\s*1\)/,
+    )
   })
 })

@@ -3,7 +3,16 @@
  * Selection drives the inspector; chevrons fold tree children only.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react"
 import { PanelLeft } from "lucide-react"
 import { api } from "../../client/index"
 import { VirtualList, type VirtualListHandle } from "../../components/VirtualList"
@@ -82,6 +91,36 @@ const TRACE_SPLIT_DEFAULT = 0.4
 
 type ViewMode = "tree" | "waterfall"
 
+function TraceScopeDrawerLayer({
+  entered,
+  settled,
+  onDismiss,
+}: {
+  entered: boolean
+  settled: boolean
+  onDismiss: () => void
+}) {
+  return (
+    <div
+      className="trace-scope-drawer-layer"
+      data-entered={entered ? "true" : "false"}
+    >
+      <button
+        type="button"
+        className="trace-scope-drawer-scrim"
+        aria-label="Close thread drawer"
+        onClick={onDismiss}
+      />
+      <div className="trace-scope-drawer-shell">
+        <TraceScopeDrawer onDismiss={onDismiss} motionReady={settled} />
+      </div>
+    </div>
+  )
+}
+
+/** Must match `--trace-scope-drawer-dur` in index.css. */
+const TRACE_SCOPE_DRAWER_MS = 300
+
 export function TraceDag({
   dag,
   runId,
@@ -129,9 +168,17 @@ export function TraceDag({
   const [compareDag, setCompareDag] = useState<TraceDag | null>(null)
   const [zenSearchOpen, setZenSearchOpen] = useState(false)
   const [scopeDrawerOpen, setScopeDrawerOpen] = useState(false)
+  /** Layer stays mounted after close so the exit transition can finish. */
+  const [scopeDrawerExiting, setScopeDrawerExiting] = useState(false)
+  /** Second frame after open — drives CSS enter transition. */
+  const [scopeDrawerEntered, setScopeDrawerEntered] = useState(false)
+  /** After enter settles — safe for focus/scroll. */
+  const [scopeDrawerSettled, setScopeDrawerSettled] = useState(false)
+  const scopeDrawerReturnFocusRef = useRef(false)
   const [focusedPane, setFocusedPane] = useState<TracePane>("tree")
   const [splitRatio, setSplitRatio] = useState(TRACE_SPLIT_DEFAULT)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const scopeDrawerActive = scopeDrawerOpen || scopeDrawerExiting
 
   // Publish Trace pane for keymap Active Context (clear when Trace loses keys).
   useEffect(() => {
@@ -492,9 +539,9 @@ export function TraceDag({
     onFocusedPaneChange,
     searchOpen: filterOpen,
     onSearchOpenChange,
-    scopeDrawerOpen,
+    scopeDrawerOpen: scopeDrawerActive,
     onScopeDrawerOpenChange: (open) => {
-      if (open) setScopeDrawerOpen(true)
+      if (open) openScopeDrawer()
       else closeScopeDrawer(true)
     },
     isZen,
@@ -513,7 +560,7 @@ export function TraceDag({
     sectionControllerRef,
     treeNav: {
       enabled:
-        !scopeDrawerOpen &&
+        !scopeDrawerActive &&
         focusedPane === "tree" &&
         viewMode === "tree" &&
         Boolean(runId && dag.hasData && treeIndex.nodes.length > 0),
@@ -526,13 +573,78 @@ export function TraceDag({
     },
   })
 
-  function closeScopeDrawer(returnFocus = true) {
-    setScopeDrawerOpen(false)
-    if (!returnFocus) return
-    window.requestAnimationFrame(() => {
-      treeScrollRef.current?.focus({ preventScroll: true })
-    })
+  function prefersReducedMotion(): boolean {
+    return (
+      typeof window !== "undefined" &&
+      Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches)
+    )
   }
+
+  function openScopeDrawer() {
+    scopeDrawerReturnFocusRef.current = false
+    setScopeDrawerExiting(false)
+    setScopeDrawerOpen(true)
+  }
+
+  function closeScopeDrawer(returnFocus = true) {
+    if (!scopeDrawerOpen && !scopeDrawerExiting) return
+    if (scopeDrawerExiting) return
+    scopeDrawerReturnFocusRef.current = returnFocus
+    setScopeDrawerSettled(false)
+    setScopeDrawerEntered(false)
+    setScopeDrawerOpen(false)
+    if (prefersReducedMotion()) {
+      setScopeDrawerExiting(false)
+      if (returnFocus) {
+        window.requestAnimationFrame(() => {
+          treeScrollRef.current?.focus({ preventScroll: true })
+        })
+      }
+      return
+    }
+    setScopeDrawerExiting(true)
+  }
+
+  useLayoutEffect(() => {
+    if (!scopeDrawerOpen) return
+    setScopeDrawerExiting(false)
+    setScopeDrawerEntered(false)
+    setScopeDrawerSettled(false)
+    if (prefersReducedMotion()) {
+      setScopeDrawerEntered(true)
+      setScopeDrawerSettled(true)
+      return
+    }
+    const id = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => setScopeDrawerEntered(true))
+    })
+    return () => window.cancelAnimationFrame(id)
+  }, [scopeDrawerOpen])
+
+  useEffect(() => {
+    if (!scopeDrawerOpen || !scopeDrawerEntered) {
+      setScopeDrawerSettled(false)
+      return
+    }
+    if (prefersReducedMotion()) {
+      setScopeDrawerSettled(true)
+      return
+    }
+    const t = window.setTimeout(() => setScopeDrawerSettled(true), TRACE_SCOPE_DRAWER_MS)
+    return () => window.clearTimeout(t)
+  }, [scopeDrawerOpen, scopeDrawerEntered])
+
+  useEffect(() => {
+    if (!scopeDrawerExiting) return
+    const t = window.setTimeout(() => {
+      setScopeDrawerExiting(false)
+      if (!scopeDrawerReturnFocusRef.current) return
+      window.requestAnimationFrame(() => {
+        treeScrollRef.current?.focus({ preventScroll: true })
+      })
+    }, TRACE_SCOPE_DRAWER_MS)
+    return () => window.clearTimeout(t)
+  }, [scopeDrawerExiting])
 
   function onTogglePlayground() {
     setPlaygroundOpen((open) => {
@@ -633,8 +745,11 @@ export function TraceDag({
       foldMode={openState.foldMode}
       onFoldModeChange={onFoldModeChange}
       viewMode={viewMode}
-      scopeDrawerOpen={scopeDrawerOpen}
-      onScopeDrawerOpenChange={setScopeDrawerOpen}
+      scopeDrawerOpen={scopeDrawerActive}
+      onScopeDrawerOpenChange={(open) => {
+        if (open) openScopeDrawer()
+        else closeScopeDrawer(true)
+      }}
       onExitZen={exitZen}
     />
   )
@@ -650,11 +765,14 @@ export function TraceDag({
           <div className="trace-scope-row">
             <button
               type="button"
-              className={`trace-scope-drawer-toggle${scopeDrawerOpen ? " is-open" : ""}`}
-              aria-label={scopeDrawerOpen ? "Close thread drawer" : "Open thread drawer"}
-              aria-expanded={scopeDrawerOpen}
+              className={`trace-scope-drawer-toggle${scopeDrawerActive ? " is-open" : ""}`}
+              aria-label={scopeDrawerActive ? "Close thread drawer" : "Open thread drawer"}
+              aria-expanded={scopeDrawerActive}
               title={`Thread / run drawer (${formatModChord("\\")})`}
-              onClick={() => setScopeDrawerOpen((open) => !open)}
+              onClick={() => {
+                if (scopeDrawerActive) closeScopeDrawer(true)
+                else openScopeDrawer()
+              }}
             >
               <PanelLeft size={15} strokeWidth={2} aria-hidden />
             </button>
@@ -743,21 +861,9 @@ export function TraceDag({
           </>
         ) : null}
 
-        <div className={`trace-body trace-split-body${isZen ? " trace-split-body--zen" : ""} ${WIDGET_LOG_BODY_CLASS}`}>
-          {scopeDrawerOpen ? (
-            <>
-              <button
-                type="button"
-                className="trace-scope-drawer-scrim"
-                aria-label="Close thread drawer"
-                onClick={() => closeScopeDrawer(true)}
-              />
-              <TraceScopeDrawer
-                onPicked={() => closeScopeDrawer(true)}
-                onDismiss={() => closeScopeDrawer(true)}
-              />
-            </>
-          ) : null}
+        <div
+          className={`trace-body trace-split-body${isZen ? " trace-split-body--zen" : ""} ${WIDGET_LOG_BODY_CLASS}`}
+        >
           {emptySlot ? (
             <>
               {isZen ? zenHud : null}
@@ -869,9 +975,23 @@ export function TraceDag({
                   </DetailSectionProvider>
                 </div>
               </div>
-            </div>
+              </div>
+              {scopeDrawerActive ? (
+                <TraceScopeDrawerLayer
+                  entered={scopeDrawerEntered}
+                  settled={scopeDrawerSettled}
+                  onDismiss={() => closeScopeDrawer(true)}
+                />
+              ) : null}
             </div>
           )}
+          {scopeDrawerActive && emptySlot ? (
+            <TraceScopeDrawerLayer
+              entered={scopeDrawerEntered}
+              settled={scopeDrawerSettled}
+              onDismiss={() => closeScopeDrawer(true)}
+            />
+          ) : null}
         </div>
         {/* Peer of body — inside panel frame, never boxed by pane-focus rings. */}
         {operatorKeysEnabled && !emptySlot ? (

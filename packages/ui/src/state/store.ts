@@ -316,7 +316,10 @@ interface AppState {
   setActiveThreadId: (id: string | null) => void
   setThreadSidebarCollapsed: (collapsed: boolean) => void
   openThreadsPanel: () => void
-  selectThread: (id: string | null) => Promise<void>
+  selectThread: (
+    id: string | null,
+    opts?: { preferredRunId?: string | null },
+  ) => Promise<void>
   selectRun: (runId: string, threadId: string) => Promise<void>
   bootstrapThreads: () => Promise<void>
   deleteThread: (threadId: string) => Promise<void>
@@ -785,26 +788,35 @@ export const useStore = create<AppState>()(
             return
           }
         }
+        if (activeRunId && get().activeRunId === activeRunId) {
+          const cached = get().runs.find((r) => r.id === activeRunId)
+          if (cached?.trace?.length && get().trace.length > 0) return
+        }
         set({ activeRunId })
         if (!activeRunId) return
-        // Load historical run data into the store so all widgets reflect
-        // the selected run (steps, trace, audit, logs).
         const store = get()
         const run = store.runs.find((r) => r.id === activeRunId)
-        const isLive = run?.status === RunStatus.Pending || run?.status === RunStatus.Running || run?.status === RunStatus.Planning
-        if (isLive) return  // live run already has fresh data in store
+        const isLive =
+          run?.status === RunStatus.Pending ||
+          run?.status === RunStatus.Running ||
+          run?.status === RunStatus.Planning
+        if (run?.trace?.length) {
+          const steps = run.stepData?.length
+            ? run.stepData
+            : tracesToSteps(run.trace)
+          get().setSteps(steps)
+          if (run.auditTrail?.length) get().setAudit(run.auditTrail)
+          get().setTrace(run.trace)
+        }
+        if (isLive) return
         Promise.all([
           api.getRun(activeRunId),
           api.getRunTrace(activeRunId),
         ]).then(([detail, rawTrace]) => {
+          if (get().activeRunId !== activeRunId) return
           const d = detail as RunDetail
           const normalized = normalizeTraceWire(rawTrace as unknown[])
           const trace = normalized.entries
-          // Schema v14: server no longer ships steps in d.data — derive
-          // from the trace so all step-driven widgets (Trace,
-          // ToolTimelinePanel, problems, current-activity) keep working
-          // for historical runs. If the server ever brings back d.data.steps,
-          // we prefer that over the derived shape.
           const steps = d.data?.steps?.length ? d.data.steps : tracesToSteps(trace)
           get().setSteps(steps)
           get().setAudit(d.audit ?? [])
@@ -928,48 +940,71 @@ export const useStore = create<AppState>()(
           threadsPanelOpenNonce: s.threadsPanelOpenNonce + 1,
           threadSidebarCollapsed: false,
         })),
-      selectThread: async (threadId) => {
-        // Never blank the multi-thread run cache on switch — TermChat keys
-        // emptiness off displayRuns.length, so runs:[] paints the empty hero
-        // for a few ms before listThreadRuns returns. Previous thread cannot
-        // paint into the next: widgets filter by activeThreadId / threadId.
-        const cached = threadId
-          ? get().runs
-              .filter((r) => r.threadId === threadId)
-              .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-          : []
-        set({
-          activeThreadId: threadId,
-          activeRunId: cached.length > 0 ? cached[cached.length - 1]!.id : null,
-          steps: [],
-          trace: [],
-          traceCreatedAtMs: [],
-          audit: [],
-          pendingInput: null,
-          ...(threadId ? {} : { runs: [] }),
-        })
-        if (!threadId) return
+      selectThread: async (threadId, opts) => {
+        if (threadId === get().activeThreadId) {
+          const preferred = opts?.preferredRunId
+          if (!preferred || preferred === get().activeRunId) return
+          const run = get().runs.find(
+            (r) => r.id === preferred && r.threadId === threadId,
+          )
+          if (run) get().setActiveRun(preferred)
+          return
+        }
+        set({ activeThreadId: threadId, pendingInput: null })
+        if (!threadId) {
+          set({
+            activeRunId: null,
+            runs: [],
+            steps: [],
+            trace: [],
+            traceCreatedAtMs: [],
+            audit: [],
+          })
+          return
+        }
+        const cachedRuns = get().runs.filter((r) => r.threadId === threadId)
+        const cachedPreferred = opts?.preferredRunId
+          ? cachedRuns.find((r) => r.id === opts.preferredRunId)
+          : null
+        const cachedNewest =
+          cachedRuns.length > 0
+            ? cachedRuns.reduce((a, b) =>
+                new Date(a.createdAt).getTime() >= new Date(b.createdAt).getTime()
+                  ? a
+                  : b,
+              )
+            : null
+        const cachedTarget = cachedPreferred ?? cachedNewest
+        if (cachedTarget) get().setActiveRun(cachedTarget.id)
         try {
           const runs = await api.listThreadRuns(threadId)
-          // The user may have selected another thread while this request was
-          // in flight. Never let a stale response replace the current thread.
           if (get().activeThreadId !== threadId) return
-          // Preserve SSE-owned fields (streamingAnswer, trace, steps, audit)
-          // when refreshing server metadata. A plain set({ runs }) erased
-          // visible in-progress answers during thread navigation.
           get().setRuns(runs)
+          const preferred = opts?.preferredRunId
+          const preferredRun = preferred
+            ? runs.find((r) => r.id === preferred)
+            : null
+          if (preferredRun) {
+            get().setActiveRun(preferredRun.id)
+            return
+          }
           if (runs.length > 0) {
-            // listThreadRuns is newest-first; activate the most recent run
-            // (not runs.at(-1), which would be the oldest).
             const newest = runs.reduce((a, b) =>
-              new Date(a.createdAt).getTime() >= new Date(b.createdAt).getTime() ? a : b,
+              new Date(a.createdAt).getTime() >= new Date(b.createdAt).getTime()
+                ? a
+                : b,
             )
             get().setActiveRun(newest.id)
           } else {
-            set({ activeRunId: null })
+            set({
+              activeRunId: null,
+              steps: [],
+              trace: [],
+              traceCreatedAtMs: [],
+              audit: [],
+            })
           }
         } catch {
-          // Drop only this thread's rows; keep the rest of the cache.
           if (get().activeThreadId === threadId) get().setRuns([])
         }
       },
@@ -1037,8 +1072,10 @@ export const useStore = create<AppState>()(
       },
       selectRun: async (runId, threadId) => {
         if (get().activeThreadId !== threadId) {
-          await get().selectThread(threadId)
+          await get().selectThread(threadId, { preferredRunId: runId })
+          return
         }
+        if (get().activeRunId === runId) return
         const run = get().runs.find((r) => r.id === runId)
         if (!run || run.threadId !== threadId) return
         get().setActiveRun(runId)

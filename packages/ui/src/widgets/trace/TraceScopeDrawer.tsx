@@ -1,5 +1,5 @@
 /**
- * Trace scope drawer — floating pick-only Thread/Run overlay.
+ * Trace scope drawer — floating Thread/Run overlay over the trace split.
  * Same store path as breadcrumbs; keyboard: j/k · Enter · Esc.
  * Row chrome matches Trace left DAG tree (depth pad + left rail).
  */
@@ -22,6 +22,7 @@ import {
   moveScopeDrawerIndex,
   type ScopeDrawerItem,
 } from "./trace-scope-drawer-nav"
+import { scrollScopeDrawerRowIntoList } from "./trace-scope-drawer-scroll"
 import { traceTreeNodeCellStyle } from "./trace-tree-guides"
 
 function scopeRowClass(...parts: Array<string | false | undefined>): string {
@@ -29,19 +30,18 @@ function scopeRowClass(...parts: Array<string | false | undefined>): string {
 }
 
 export function TraceScopeDrawer({
-  onPicked,
   onDismiss,
+  motionReady = true,
 }: {
-  /** After selecting a run — close + return focus to DAG. */
-  onPicked: () => void
-  /** Esc / header dismiss — close without selection change. */
+  /** Esc / scrim dismiss — close without changing selection. */
   onDismiss: () => void
+  /** False while the open transition runs — blocks focus/scroll jank. */
+  motionReady?: boolean
 }) {
   const threads = useStore((s) => s.threads)
   const runs = useStore((s) => s.runs)
   const activeThreadId = useStore((s) => s.activeThreadId)
   const activeRunId = useStore((s) => s.activeRunId)
-  const selectThread = useStore((s) => s.selectThread)
   const selectRun = useStore((s) => s.selectRun)
 
   const rootRef = useRef<HTMLElement>(null)
@@ -77,20 +77,23 @@ export function TraceScopeDrawer({
   }, [items, activeRunId, activeThreadId])
 
   useEffect(() => {
+    if (!motionReady) return
     rootRef.current?.focus({ preventScroll: true })
-  }, [])
+  }, [motionReady])
 
   useEffect(() => {
     if (focusIndex >= items.length) {
       setFocusIndex(items.length > 0 ? items.length - 1 : -1)
       return
     }
-    if (focusIndex < 0) return
-    const el = rootRef.current?.querySelector<HTMLElement>(
-      `[data-scope-idx="${focusIndex}"]`,
-    )
-    el?.scrollIntoView({ block: "nearest" })
-  }, [focusIndex, items])
+    if (!motionReady || focusIndex < 0) return
+    const root = rootRef.current
+    if (!root) return
+    const list = root.querySelector<HTMLElement>(".trace-scope-drawer__list")
+    const row = root.querySelector<HTMLElement>(`[data-scope-idx="${focusIndex}"]`)
+    if (!list || !row) return
+    scrollScopeDrawerRowIntoList(list, row)
+  }, [focusIndex, items, motionReady])
 
   function toggleExpand(threadId: string) {
     setExpandedIds((prev) => {
@@ -101,26 +104,15 @@ export function TraceScopeDrawer({
     })
   }
 
-  function onPickThread(threadId: string) {
-    void selectThread(threadId).catch((err: unknown) => {
-      console.error("[mia] TraceScopeDrawer selectThread", err)
-    })
-  }
-
   function onPickRun(runId: string, threadId: string) {
-    void selectRun(runId, threadId)
-      .then(() => onPicked())
-      .catch((err: unknown) => {
-        console.error("[mia] TraceScopeDrawer selectRun", err)
-      })
+    void selectRun(runId, threadId).catch((err: unknown) => {
+      console.error("[mia] TraceScopeDrawer selectRun", err)
+    })
   }
 
   function activateItem(item: ScopeDrawerItem) {
     if (item.kind === "thread") {
       toggleExpand(item.threadId)
-      void selectThread(item.threadId).catch((err: unknown) => {
-        console.error("[mia] TraceScopeDrawer selectThread", err)
-      })
       return
     }
     onPickRun(item.runId, item.threadId)
@@ -223,8 +215,7 @@ export function TraceScopeDrawer({
                     className="trace-tree-row__btn"
                     onClick={() => {
                       setFocusIndex(threadIdx)
-                      onPickThread(thread.id)
-                      if (!expanded) toggleExpand(thread.id)
+                      toggleExpand(thread.id)
                     }}
                   >
                     <span

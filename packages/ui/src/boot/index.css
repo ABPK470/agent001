@@ -282,7 +282,9 @@
   /*
    * Event Stream lanes — dual-mode badge tokens (ink / soft / border).
    * Dark: glowing ink + translucent tint. Red/rose reserved for severity.
-   * Spread: run indigo · sync cyan · api amber · agent emerald · system zinc
+   * Spread: run indigo · sync cyan · api wheat · agent emerald · system zinc
+   * Derive soft/border from ink: dark → rgba(ink_rgb, 0.14|0.28); light → same
+   * hue, ink ~700-step readable, soft ~50–100 tint, border ~200–300 tint.
    * (system stays cool/neutral but loses the blue cast that read as faded run).
    */
   --stream-run-ink: #818cf8;
@@ -300,9 +302,9 @@
   --stream-agent-ink: #34d399;
   --stream-agent-soft: rgba(52, 211, 153, 0.14);
   --stream-agent-border: rgba(52, 211, 153, 0.28);
-  --stream-api-ink: #fbbf24;
-  --stream-api-soft: rgba(251, 191, 36, 0.14);
-  --stream-api-border: rgba(251, 191, 36, 0.28);
+  --stream-api-ink: #f8ed81;
+  --stream-api-soft: rgba(248, 237, 129, 0.14);
+  --stream-api-border: rgba(248, 237, 129, 0.28);
   /* System = zinc (true gray) — not blue-slate, so histogram ≠ washed run. */
   --stream-system-ink: #a1a1aa;
   --stream-system-soft: rgba(161, 161, 170, 0.14);
@@ -488,9 +490,9 @@
   --stream-agent-ink: #047857;
   --stream-agent-soft: #ecfdf5;
   --stream-agent-border: #a7f3d0;
-  --stream-api-ink: #b45309;
-  --stream-api-soft: #fef3c7;
-  --stream-api-border: #fcd34d;
+  --stream-api-ink: #a16207;
+  --stream-api-soft: #fef9c3;
+  --stream-api-border: #fde047;
   /* System = zinc — cool neutral without slate’s blue cast. */
   --stream-system-ink: #52525b;
   --stream-system-soft: #f4f4f5;
@@ -10963,38 +10965,106 @@ button.trace-tree-status-pill:hover {
   background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
+/*
+ * Scope drawer — right overlay (Datadog / thread-rail dialect).
+ *
+ * THREE nodes, one job each — never animate the host or the split panes:
+ *   layer  — full-host stack (no transform)
+ *   shell  — invisible clip rect only (NO paint — a painted shell flashes an
+ *            empty drawer before the panel slides in)
+ *   panel  — sole painted + translating node (bg, border, shadow, content)
+ *
+ * Open/close both use [data-entered] transitions (layer stays mounted on exit).
+ * Focus/scroll wait until settle after enter.
+ */
+.trace-scope-drawer-layer {
+  --trace-scope-drawer-dur: 300ms;
+  --trace-scope-drawer-ease: cubic-bezier(0.33, 1, 0.68, 1);
+  --trace-scope-drawer-w: min(36rem, 94%);
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  transform: none;
+}
+
 .trace-scope-drawer-scrim {
   position: absolute;
   inset: 0;
-  z-index: 4;
+  z-index: 1;
   border: 0;
   padding: 0;
   margin: 0;
-  background: color-mix(in srgb, var(--canvas, #0b0f14) 28%, transparent);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: color-mix(in srgb, var(--canvas, #0b0f14) 20%, transparent);
   cursor: default;
+  pointer-events: auto;
+  transform: none;
+  opacity: 0;
+  transition: opacity var(--trace-scope-drawer-dur) var(--trace-scope-drawer-ease);
 }
 
-.trace-scope-drawer {
+.trace-scope-drawer-layer[data-entered="true"] .trace-scope-drawer-scrim {
+  opacity: 1;
+}
+
+/* Clip only — never paint. Painting here = empty drawer flash before slide. */
+.trace-scope-drawer-shell {
   position: absolute;
-  top: 0.35rem;
-  left: 0.35rem;
-  bottom: 0.35rem;
-  z-index: 5;
-  width: min(420px, 92%);
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  z-index: 2;
+  width: var(--trace-scope-drawer-w);
+  overflow: hidden;
+  pointer-events: none;
+  transform: none;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/* Sole painted surface — slides as one piece (open and close). */
+.trace-scope-drawer {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border: 1px solid var(--border-subtle);
-  border-radius: 0.65rem;
+  overflow: hidden;
+  border: none;
+  border-left: 1px solid var(--border-subtle);
+  border-radius: 0;
   background: var(--panel-2, var(--panel));
   box-shadow:
-    0 0 0 1px rgb(0 0 0 / 0.12),
-    8px 0 24px rgb(0 0 0 / 0.28);
+    -1px 0 0 color-mix(in srgb, var(--border-subtle) 80%, transparent),
+    -10px 0 32px color-mix(in srgb, var(--canvas, #0b0f14) 55%, transparent);
+  pointer-events: auto;
+  transform: translate3d(100%, 0, 0);
+  transition: transform var(--trace-scope-drawer-dur) var(--trace-scope-drawer-ease);
   --trace-tree-hpad: 16px;
   --trace-tree-base-pad: 16px;
   --trace-tree-indent: 20px;
+}
+
+.trace-scope-drawer-layer[data-entered="true"] .trace-scope-drawer {
+  transform: translate3d(0, 0, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trace-scope-drawer,
+  .trace-scope-drawer-scrim {
+    transition: none;
+  }
+
+  .trace-scope-drawer {
+    transform: none;
+  }
+
+  .trace-scope-drawer-layer[data-entered="true"] .trace-scope-drawer {
+    transform: none;
+  }
 }
 
 .trace-scope-drawer__head {
@@ -11003,10 +11073,10 @@ button.trace-tree-status-pill:hover {
   justify-content: space-between;
   gap: 0.5rem;
   flex-shrink: 0;
-  padding: 0.62rem 0.75rem;
+  padding: 0.7rem 0.85rem;
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--section-cap-bg, transparent);
-  border-radius: 0.65rem 0.65rem 0 0;
+  background: color-mix(in srgb, var(--panel) 88%, var(--panel-2, var(--panel)));
+  border-radius: 0;
 }
 
 .trace-scope-drawer__title {
@@ -17819,11 +17889,11 @@ button.space-layout-preview__leaf-inner--link:focus-visible .space-layout-previe
   isolation: isolate;
 }
 
-/* Summon — top-biased (⌘K / Raycast ergonomics), never geometric center. */
+/* Summon — large board: optical center (slim palettes may sit higher; this is not one). */
 .ops-sheet-overlay--summon {
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: max(8vh, 3.75rem) 1.25rem 1.25rem;
+  padding: clamp(1rem, 3vh, 2rem) 1.25rem;
 }
 
 .ops-sheet {
