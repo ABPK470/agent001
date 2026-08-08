@@ -221,7 +221,7 @@ export function SearchablePick({
             {filtered.length === 0 ? (
               <button
                 type="button"
-                className="block w-full px-3 py-2 text-left text-sm text-text-muted hover:bg-elevated"
+                className="block w-full px-3 py-2 text-left text-sm text-text-muted hover:bg-[var(--hover-fill)]"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => commit(query)}
               >
@@ -234,7 +234,7 @@ export function SearchablePick({
                   type="button"
                   role="option"
                   aria-selected={option.value === value}
-                  className="listbox-popover__option flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-elevated"
+                  className="listbox-popover__option flex w-full items-start gap-2 px-3 py-2 text-left"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => commit(option.value)}
                 >

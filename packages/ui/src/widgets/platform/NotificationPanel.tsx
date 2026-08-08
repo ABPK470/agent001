@@ -275,7 +275,7 @@ export function NotificationPanel() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-80 max-h-[480px] bg-elevated border border-border rounded-xl shadow-xl shadow-black/40 z-50 flex flex-col overflow-hidden">
+        <div className="menu-panel absolute right-0 top-full z-50 mt-2 flex w-80 max-h-[480px] flex-col overflow-hidden rounded-xl">
           <div className="flex items-center justify-between px-4 pt-3 pb-2.5 border-b border-border shrink-0">
             <span className="text-sm font-semibold text-text">
               Notifications

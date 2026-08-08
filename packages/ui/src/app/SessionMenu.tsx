@@ -1,6 +1,6 @@
 /**
  * SessionMenu — identity + session actions behind a single burger control.
- * Admin and operator share one header shape (name · role · theme).
+ * Header: name · role · theme (same shape as before — identity left, theme right).
  */
 
 import {
@@ -40,25 +40,20 @@ interface Props {
 }
 
 function menuItemClass(destructive = false): string {
-  return [
-    "mx-1 flex w-[calc(100%-0.5rem)] items-center gap-3 rounded-[var(--list-row-radius)] px-3 py-2 text-left text-sm transition-colors",
-    destructive
-      ? "text-text-muted hover:bg-error-soft hover:text-text"
-      : "text-text-secondary hover:bg-[var(--hover-fill)] hover:text-text",
-  ].join(" ")
+  return destructive ? "session-menu-item session-menu-item--danger" : "session-menu-item"
 }
 
-/** ⌘ / ⌥ read small in mono — keep symbol weight matched. */
+/** ⌘⌥ — same platform face as Dispatch ⌘K so weights match. */
 function ShellShortcutHint({ hint }: { hint: string }) {
   if (hint === "⌘⌥") {
     return (
-      <span className="inline-flex shrink-0 items-center gap-px text-text-faint" aria-label={hint}>
-        <span className="text-[13px] font-medium leading-none tracking-tight">⌘</span>
-        <span className="text-[13px] font-medium leading-none tracking-tight">⌥</span>
+      <span className="session-menu-shortcut" aria-label={hint}>
+        <span>⌘</span>
+        <span>⌥</span>
       </span>
     )
   }
-  return <span className="shrink-0 font-mono text-[11px] text-text-faint">{hint}</span>
+  return <span className="session-menu-shortcut">{hint}</span>
 }
 
 export function SessionMenu({
@@ -139,12 +134,12 @@ export function SessionMenu({
 
   return (
     <>
-      <div className="relative z-[1]" ref={menuRef}>
+      <div className={open ? "relative z-[80]" : "relative z-[1]"} ref={menuRef}>
         <button
           type="button"
           className={triggerClass}
           onClick={() => setOpen((value) => !value)}
-          title={me.isAdmin ? `${displayName} · admin` : displayName}
+          title={open ? undefined : me.isAdmin ? `${displayName} · admin` : displayName}
           aria-label={me.isAdmin ? "Session menu · admin" : "Session menu"}
           aria-expanded={open}
           aria-haspopup="menu"
@@ -155,23 +150,21 @@ export function SessionMenu({
         {open && (
           <div
             role="menu"
-            className="session-menu-panel absolute right-0 top-full z-50 mt-1.5 w-[16.5rem] overflow-hidden rounded-xl border border-border bg-panel-2 py-1 shadow-xl shadow-black/40"
+            className="menu-panel session-menu-panel absolute right-0 top-full mt-2 w-[16.5rem] overflow-hidden rounded-xl py-1"
           >
-            <div className="px-3.5 pb-2.5 pt-2.5">
-              <div className="flex min-w-0 items-start justify-between gap-2.5">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[14px] font-semibold leading-snug text-text">{displayName}</p>
-                  <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-faint">
-                    {role}
+            <div className="session-menu-header">
+              <div className="session-menu-identity">
+                <p className="truncate text-[14px] font-semibold leading-snug text-text">{displayName}</p>
+                <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-faint">
+                  {role}
+                </p>
+                {subtitle && (
+                  <p className="mt-0.5 truncate font-mono text-[11px] leading-snug text-text-muted" title={me.upn}>
+                    {subtitle}
                   </p>
-                  {subtitle && (
-                    <p className="mt-0.5 truncate font-mono text-[11px] leading-snug text-text-muted" title={me.upn}>
-                      {subtitle}
-                    </p>
-                  )}
-                </div>
-                <SessionThemeSwitch className="mt-0.5" />
+                )}
               </div>
+              <SessionThemeSwitch className="mt-0.5" />
             </div>
 
             {shellSwitchItem && (
@@ -260,7 +253,6 @@ export function SessionMenu({
               <BookOpen size={15} className="shrink-0 text-text-muted" />
               About
             </button>
-            <div className="session-menu-divider" />
             <button
               type="button"
               role="menuitem"

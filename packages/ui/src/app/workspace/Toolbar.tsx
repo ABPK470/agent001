@@ -502,7 +502,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
               <ChevronDown size={14} className="block shrink-0" />
             </button>
             {moreOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1.5 max-h-[60vh] w-56 overflow-y-auto rounded-xl border border-border bg-panel-2 py-1.5 shadow-xl shadow-black/40">
+              <div className="menu-panel absolute right-0 top-full z-50 mt-2 max-h-[60vh] w-56 overflow-y-auto rounded-xl py-1.5">
                 {views.map((view) => (
                   <button
                     key={view.id}

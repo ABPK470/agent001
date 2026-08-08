@@ -131,7 +131,7 @@ export function ViewingAsControl({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 flex w-72 max-h-80 flex-col overflow-hidden rounded-xl border border-border bg-elevated shadow-2xl">
+        <div className="menu-panel absolute right-0 top-full z-50 mt-2 flex w-72 max-h-80 flex-col overflow-hidden rounded-xl">
           {!isMe && (
             <div className="shrink-0 border-b border-border p-2">
               <button

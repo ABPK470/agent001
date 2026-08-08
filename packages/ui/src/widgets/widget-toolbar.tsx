@@ -310,7 +310,7 @@ export function WidgetToolbarFilterMenu({
           <div
             ref={panelRef}
             role="menu"
-            className="fixed max-h-[min(20rem,calc(100dvh-2rem))] overflow-y-auto rounded-md border border-border-subtle bg-elevated py-1 shadow-2xl"
+            className="menu-panel fixed max-h-[min(20rem,calc(100dvh-2rem))] overflow-y-auto rounded-md py-1"
             style={{
               zIndex: FILTER_MENU_Z_PANEL,
               top: pos?.top ?? 0,

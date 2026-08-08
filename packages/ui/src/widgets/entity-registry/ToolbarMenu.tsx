@@ -119,7 +119,7 @@ export function ToolbarMenu({
           <div className="fixed inset-0 z-[250]" onClick={close} aria-hidden />
           <div
             ref={panelRef}
-            className={`fixed z-[260] ${minWidthClass} rounded-md border border-border-subtle bg-elevated py-1 shadow-2xl`}
+            className={`menu-panel fixed z-[260] ${minWidthClass} rounded-md py-1`}
             style={{ top: menuPos.top, left: menuPos.left, minWidth: menuPos.minWidth }}
             role="menu"
             onClick={close}

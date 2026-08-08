@@ -662,7 +662,7 @@ export function App() {
               {mobileMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setMobileMenuOpen(false)} />
-                  <div className="absolute right-0 top-10 z-50 bg-elevated rounded-xl border border-border shadow-2xl py-1 w-44">
+                  <div className="menu-panel absolute right-0 top-10 z-50 w-44 rounded-xl py-1">
                     {me?.isAdmin && (
                     <button
                       className="flex items-center gap-2.5 w-full px-4 py-3 text-sm text-text-secondary active:bg-overlay-2"
